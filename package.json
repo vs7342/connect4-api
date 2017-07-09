@@ -1,0 +1,21 @@
+{
+  "name": "connect4-api",
+  "version": "1.0.0",
+  "description": "API for the connect-4 game. Developed as a part of ISTE-759 coursework.",
+  "repository": {
+    "url": ""
+  },
+  "main": "app.js",
+  "author": {
+    "name": "Vidit Singhal",
+    "email": "vs7342@g.rit.edu",
+    "url": "http://www.github.com/vs7342"
+  },
+  "dependencies": {
+    "body-parser": "^1.17.2",
+    "express": "^4.15.3",
+    "mysql2": "^1.3.5",
+    "sequelize": "^4.2.1",
+    "socket.io": "^2.0.3"
+  }
+}

@@ -1,0 +1,8 @@
+{
+    "MySQL":{
+        "host":"prod-host",
+        "dbname":"prod-db-name",
+        "username":"prod-username",
+        "password":"prod-pwd"
+    }
+}

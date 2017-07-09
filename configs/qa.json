@@ -1,0 +1,8 @@
+{
+    "MySQL":{
+        "host":"qa-host",
+        "dbname":"qa-db-name",
+        "username":"qa-username",
+        "password":"qa-pwd"
+    }
+}
