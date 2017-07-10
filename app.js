@@ -11,6 +11,7 @@ var body_parser = require('body-parser');
 var helper = require('./helper');
 
 //Services
+var service_user = require('./services/UserService');
 
 //Initializing the express app
 var app = express();
@@ -49,6 +50,13 @@ app.post('/test', function(req, res){
     res.status(200).send({'test_param': test_param});
 })
 
+/* Application Routes */
+
+//User Service
+app.post('/signup', service_user.signup);
+app.post('/login', service_user.login);
+app.get('/screen/available', service_user.checkScreenName);
+app.get('/email/available', service_user.checkEmail);
 
 
 
