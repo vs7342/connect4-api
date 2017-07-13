@@ -12,6 +12,7 @@ var helper = require('./helper');
 
 //Services
 var service_user = require('./services/UserService');
+var service_message = require('./services/MessageService');
 
 //Initializing the express app
 var app = express();
@@ -19,7 +20,7 @@ var server = http.createServer(app);
 
 //Middleware stuff - So that we can use the request.body in endpoints - Will accept both JSON or urlencoded at a time.
 app.use(body_parser.json());
-app.use(body_parser.urlencoded());
+app.use(body_parser.urlencoded({extended: true}));
 
 //Middleware stuff - CORS and API Key header
 app.use(function(req, res, next){
@@ -57,6 +58,13 @@ app.post('/signup', service_user.signup);
 app.post('/login', service_user.login);
 app.get('/screen/available', service_user.checkScreenName);
 app.get('/email/available', service_user.checkEmail);
+
+//Message Service
+app.post('/message/individual', service_message.sendIndividualMessage);
+app.get('/message/individual/from/all', service_message.getAllIndividualMessages);
+app.get('/message/individual/from/single', service_message.getIndividualMessagesFromSingleUser)
+app.post('/message/room', service_message.sendGroupMessage);
+app.get('/message/room', service_message.getGroupMessages);
 
 
 
