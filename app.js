@@ -58,6 +58,7 @@ app.post('/signup', service_user.signup);
 app.post('/login', service_user.login);
 app.get('/screen/available', service_user.checkScreenName);
 app.get('/email/available', service_user.checkEmail);
+app.put('/enter/room', service_user.enterRoom);
 
 //Message Service
 app.post('/message/individual', service_message.sendIndividualMessage);

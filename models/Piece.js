@@ -6,7 +6,6 @@ var Sequelize = require('sequelize');
 var MySeq = require('../models/MySeq');
 
 var Piece = MySeq.define('Piece', {
-    Color: Sequelize.STRING,
     Position_X: Sequelize.INTEGER,
     Position_Y: Sequelize.INTEGER,
     Player_id: Sequelize.INTEGER,

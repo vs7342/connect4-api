@@ -9,6 +9,7 @@ var Player = MySeq.define('Player', {
     Has_Turn: Sequelize.BOOLEAN,
     Is_Challenger: Sequelize.BOOLEAN,
     Is_Winner: Sequelize.BOOLEAN,
+    Color: Sequelize.STRING,
     Last_Played: Sequelize.DATE,
     Game_id: Sequelize.INTEGER,
     Room_id: Sequelize.INTEGER,

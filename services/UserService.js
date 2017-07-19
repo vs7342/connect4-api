@@ -8,6 +8,8 @@ var crypto = require('crypto');
 
 //Custom modules
 var model_user = require('../models/User');
+var model_room = require('../models/Room');
+var model_lookup_room = require('../models/Lookup_RoomType');
 var helper = require('../helper');
 
 //Secret key to hash the password
@@ -217,10 +219,73 @@ function checkEmail(req, res){
     }
 }
 
+/**
+ * @author: Vidit Singhal
+ * @description: Endpoint for a user to enter the room. Checks if the user is eligible to enter that room based on his/her current XP
+ * @param: (Body Param)
+ *      User_id
+ *      Room_id
+ * @returns: 
+ *      whether the request was successful or not
+ */
+function enterRoom(req, res){
+    //body params
+    var User_id = req.body.User_id;
+    var Room_id = req.body.Room_id;
+    //param check
+    if(User_id){
+        //Check if user is eligible enough to enter the room - minimum xp requirement
+        //Thus, first find the room details
+        model_room.belongsTo(model_lookup_room, {foreignKey: 'RoomType_id'});
+        model_room.findOne({
+            where:{
+                id: Room_id
+            },
+            include:[{
+                model: model_lookup_room,
+                attributes: ['Minimum_XP']
+            }]
+        }).then(room_found=>{
+            if(room_found){
+                //while finding the user, where clause should include the min xp requirement
+                //Update the user table with given room id
+                model_user.update({ Room_id: Room_id },
+                {
+                    where:{
+                        id: User_id,
+                        Experience: {
+                            $or: {
+                                $gt: room_found.Lookup_RoomType.Minimum_XP,
+                                $eq: room_found.Lookup_RoomType.Minimum_XP
+                            }
+                        }
+                    }
+                }).then(update_result=>{
+                    if(update_result[0]){
+                        //This means that user entered the room successfully
+                        return res.status(200).send(helper.getResponseObject(true, 'User entered the room successfully.'));
+                    }else{
+                        return res.status(400).send(helper.getResponseObject(false, 'User not found/eligible/updated.'));
+                    }
+                }).catch(error=>{
+                    return res.status(500).send(helper.getResponseObject(false, 'Error entering the room. Code 2.'));
+                });
+            }else{
+                return res.status(400).send(helper.getResponseObject(false, 'Room not found.'));
+            }
+        }).catch(error=>{
+            return res.status(500).send(helper.getResponseObject(false, 'Error entering the room. Code 1.'));
+        })
+    }else{
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters.'));
+    }
+}
+
 //Making available the endpoints outside the module.
 module.exports = {
     signup: signup,
     login: login,
     checkScreenName: checkScreenName,
-    checkEmail: checkEmail
+    checkEmail: checkEmail,
+    enterRoom: enterRoom
 };
