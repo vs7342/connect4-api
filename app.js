@@ -13,6 +13,7 @@ var helper = require('./helper');
 //Services
 var service_user = require('./services/UserService');
 var service_message = require('./services/MessageService');
+var service_game = require('./services/GameService');
 
 //Initializing the express app
 var app = express();
@@ -67,5 +68,13 @@ app.get('/message/individual/from/single', service_message.getIndividualMessages
 app.post('/message/room', service_message.sendGroupMessage);
 app.get('/message/room', service_message.getGroupMessages);
 
+//Game Service
+app.get('/room/details', service_game.getRoomDetails);
+app.post('/challenge', service_game.challengePlayer);
+app.put('/challenge/accept', service_game.acceptChallenge);
+app.put('/challenge/cancel', service_game.cancelChallenge);
+app.put('/challenge/decline', service_game.declineChallenge);
+app.get('/challenge/incoming', service_game.incomingChallengesHB);
+app.get('/challenge/ongoing', service_game.ongoingChallengeHB);
 
 
