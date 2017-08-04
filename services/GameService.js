@@ -17,6 +17,7 @@ var model_game = require('../models/Game');
 var model_player = require('../models/Player');
 var model_piece = require('../models/Piece');
 var model_challenge = require('../models/Challenge');
+var my_seq = require('../models/MySeq');
 var helper = require('../helper');
 
 /**
@@ -407,6 +408,498 @@ function ongoingChallengeHB(req, res){
     }
 }
 
+/**
+ * @author: Vidit Singhal
+ * @description: Initializes game and player(s) objects based on challenge id
+ *               Challenge should be accepted
+ * @param: (Body Param)
+ *      Challenge_id
+ * @returns: 
+ *      {
+ *          'Game':{Game Object},
+ *          'Players':[Array of Player Objects]
+ *      }
+ */
+function initGame(req, res){
+    //body param
+    var Challenge_id = req.body.Challenge_id;
+    //param check
+    if(Challenge_id){
+        //fetch challenge details along with user details
+        model_challenge.belongsTo(model_user, {as: 'From_User', foreignKey: 'From_User_id'});
+        model_challenge.belongsTo(model_user, {as: 'To_User', foreignKey: 'To_User_id'});
+        model_challenge.findOne({
+            where:{
+                id: Challenge_id
+            },
+            include:[{
+                model: model_user, as: 'From_User'
+            },{
+                model: model_user, as: 'To_User'
+            }]
+        }).then(challenge_found=>{
+            if(challenge_found){
+                //check if the challenge is valid..accepted..not expired..not cancelled
+                if(challenge_found.Accepted == true && challenge_found.Cancelled == false && challenge_found.Expired == false && challenge_found.From_User.Room_id == challenge_found.To_User.Room_id){
+                    //Create game object
+                    model_game.create({
+                        Is_Finished: false,
+                        Start_Time: Date.now(),
+                        End_Time: null,
+                        Room_id: challenge_found.From_User.Room_id
+                    }).then(created_game=>{
+                        //Create the player objects
+                        //Challenger will be having first turn..and the color assigned would be red
+                        var challenger = {
+                            Has_Turn: true,
+                            Is_Challenger: true,
+                            Is_Winner: null,
+                            Color: 'Red',
+                            Last_Played: Date.now(),
+                            Game_id: created_game.id,
+                            Room_id: challenge_found.From_User.Room_id,
+                            User_id: challenge_found.From_User.id
+                        };
+                        //Challengee will have 'yellow' color assigned
+                        var challengee = {
+                            Has_Turn: false,
+                            Is_Challenger: false,
+                            Is_Winner: null,
+                            Color: 'Yellow',
+                            Last_Played: Date.now(),
+                            Game_id: created_game.id,
+                            Room_id: challenge_found.To_User.Room_id,
+                            User_id: challenge_found.To_User.id
+                        };
+
+                        //Bulk insert into db
+                        model_player.bulkCreate(
+                            [challenger, challengee]
+                        ).then((created_players)=>{
+                            return res.status(200).send({
+                                Game: created_game,
+                                Players: created_players 
+                            });
+                        }).catch(error=>{
+                            return res.status(500).send(helper.getResponseObject(false, 'Error initializing players. Code 1.'));
+                        });
+                    }).catch(error=>{
+                        return res.status(500).send(helper.getResponseObject(false, 'Error initializing game. Code 2.'));
+                    })
+                }else{
+                    return res.status(500).send(helper.getResponseObject(false, 'Invalid Challenge.'));
+                }
+            }else{
+                return res.status(400).send(helper.getResponseObject(false, 'Challenge not found.'));
+            }
+        }).catch(error=>{
+            return res.status(500).send(helper.getResponseObject(false, 'Error initializing game. Code 1.'));
+        })
+    }else{
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters'));
+    }
+}
+
+/**
+ * @author: Vidit Singhal
+ * @description: Validates everything before posting the piece in DB
+ *              After validating..postPieceTransaction() is called which the heart of postPiece endpoint
+ * @param: (Body Param)
+ *      Position_X
+ *      Player_id
+ *      Game_id
+ *      Room_id
+ *      User_id
+ * @returns: 
+ *      {
+ *           Is_Game_Finished: true/false,
+ *           Winner_Player_Id: -1 (If Game in progress) / 0 (If Draw) / Winner player id (If Winner found)
+ *           Winner_User_Id: -1 (If Game in progress) / 0 (If Draw) / Winner user id (If Winner found)
+ *       }
+ */
+function postPiece(req, res){
+    //body params
+    var Position_X = req.body.Position_X;
+    var Player_id = req.body.Player_id;
+    var Game_id = req.body.Game_id;
+    var Room_id = req.body.Room_id;
+    var User_id = req.body.User_id;
+    //param check
+    if(Position_X!=undefined && Player_id && Game_id && Room_id && User_id){
+        //first check if the co-ordinates of piece are in range
+        if(Position_X >= 0 && Position_X <= 6){
+            //check if the game is not already finished
+            model_game.findOne({
+                where:{
+                    id: Game_id,
+                    Room_id: Room_id,
+                    Is_Finished: false
+                }
+            }).then(game_found=>{
+                if(game_found){
+                    //So the game is valid
+                    //Now validate the player's turn
+                    model_player.findOne({
+                        where:{
+                            Has_Turn: true,
+                            id: Player_id,
+                            Game_id: Game_id,
+                            Room_id: Room_id,
+                            User_id: User_id
+                        }
+                    }).then(player_valid=>{
+                        if(player_valid){
+                            //Now check for the rest of the pieces in the game and determine the Position_Y for this piece
+                            model_piece.findAll({
+                                where:{
+                                    Game_id: Game_id,
+                                    Room_id: Room_id,
+                                    User_id: User_id
+                                }
+                            }).then(all_pieces_in_game=>{
+                                
+                                //Now check if there is space on game board - max num of pieces in game is 42
+                                var num_pieces_in_game = all_pieces_in_game.length;
+                                if(num_pieces_in_game<42){
+
+                                    //Now extract num of pieces in that column and determine y position
+                                    var single_col_pieces = 0;
+                                    for(var i=0; i<num_pieces_in_game; i++){
+                                        var single_piece = all_pieces_in_game[i];
+                                        if(single_piece!=undefined && single_piece.Position_X == Position_X){
+                                            single_col_pieces++;
+                                        }
+                                    }
+
+                                    //Position_Y is nothing but number of pieces in that column
+                                    var calculated_position_y = single_col_pieces;
+
+                                    //Check for boundary limits
+                                    if(calculated_position_y > 5){
+                                        return res.status(400).send(helper.getResponseObject(false, 'Piece co-ordinates outside Y boundary.'));
+                                    }
+
+                                    //All the validations were done
+                                    //Finally start post piece transaction
+                                    return postPieceTransaction(req, res, calculated_position_y, num_pieces_in_game);
+                                }else{
+                                    return res.status(400).send(helper.getResponseObject(false, 'Game board full. Cannot insert any more pieces.'));
+                                }
+                            }).catch(error=>{
+                                return res.status(500).send(helper.getResponseObject(false, 'Error posting piece validation. Code 3.'));
+                            })
+                        }else{
+                            return res.status(400).send(helper.getResponseObject(false, 'Player not found / Not this player\'s turn.'));
+                        }
+                    }).catch(error=>{
+                        return res.status(500).send(helper.getResponseObject(false, 'Error posting piece validation. Code 2.'));
+                    })
+                }else{
+                    return res.status(400).send(helper.getResponseObject(false, 'Game not found/already finished.'));
+                }
+            }).catch(error=>{
+                return res.status(500).send(helper.getResponseObject(false, 'Error posting piece validation. Code 1.'));
+            })
+        }else{
+            return res.status(400).send(helper.getResponseObject(false, 'Piece co-ordinates outside X boundary.'));
+        }
+    }else{
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters.'));
+    }
+}
+
+//Direction dictionary
+const directions = [
+    {x: -1, y: +1}, //NW
+    {x: -1, y:  0}, //W
+    {x: -1, y: -1}, //SW
+    {x:  0, y: -1}, //S
+    {x: +1, y: -1}, //SE
+    {x: +1, y:  0}, //E
+    {x: +1, y: +1}, //NE
+];
+
+/**
+ * @author: Vidit Singhal
+ * @description: The MAIN LOGIC of game API - 
+ *      1. Posts a piece.. updates relevant info in db
+ *      2. If winner was not found..and game board is not full..game can continue
+ *      3. If winner was not found..and game board is full..DRAW condition encountered
+ *      4. If winner was found..updates relevant info in db
+ * @param {*} req Request object for the postPiece endpoint
+ * @param {*} res Response object for the postPiece endpoint
+ * @param {*} Position_Y Calculated Y position (since it was calculated already during validations performed in postPiece endpoint)
+ * @param {*} pieces_in_game_before_piece_post number of pieces in game before posting piece (since it was calculated already during validations performed in postPiece endpoint)
+ */
+function postPieceTransaction(req, res, Position_Y, pieces_in_game_before_piece_post){
+    //Extract turn related info from request object
+    var Position_X = req.body.Position_X;
+    var Player_id = req.body.Player_id;
+    var Game_id = req.body.Game_id;
+    var Room_id = req.body.Room_id;
+    var User_id = req.body.User_id;
+
+    //default values - preparing for response object
+    var Is_Game_Finished = false;
+    var Winner_Player_Id = -1;
+    var Winner_User_Id = -1;
+
+    model_piece.findAll({
+        where:{
+            Player_id: Player_id,
+            Game_id: Game_id
+        },
+        attributes:['Position_X', 'Position_Y']
+    }).then(all_pieces=>{
+        //Start with the transaction which will do following things:
+        //1. Create a piece
+        //2. Update Current player Has_Turn attribute to false AND update Last_Played attr
+        //3. Update Opponent Player Has_Turn attribute to true
+        //4. Check for all the pieces for the current player and determine if he won or not
+        //If Winner not found
+            //If board is not full - game is still on!
+                //5. Commit the transaction (1-4) and return response
+            //If board is full - DRAW condition
+                //6. Update Game object - Is_Finished, End_Time
+                //7. Update Current Player object - Is_Winner
+                //8. Update Opponent object - Is_Winner
+                //9. Commit the transaction (1-4, 6-8)
+        //If Winner found then :
+            //10.  Update Game object - Is_Finished, End_Time
+            //11. Update Winner Player object - Is_Winner
+            //12. Update Loser Player object - Is_Winner    
+            //13. Commit the transaction (1-4, 10-12)                          
+        my_seq.transaction(function(my_transaction){
+            
+            var promises = [];
+            //1. Creating piece
+            promises.push( 
+                model_piece.create({
+                    Position_X: Position_X,
+                    Position_Y: Position_Y,
+                    Player_id: Player_id,
+                    Game_id: Game_id,
+                    Room_id: Room_id,
+                    User_id: User_id
+                },{
+                    transaction: my_transaction
+                })
+            );
+
+            //2. Update current player Has_Turn and Last_Played attribute
+            promises.push(
+                    model_player.update({
+                    Has_Turn: false,
+                    Last_Played: Date.now()
+                },{
+                    where: {
+                        id: Player_id
+                    },
+                    transaction: my_transaction
+                })
+            );
+
+            //3. Now update opponent player turn attribute
+            promises.push(
+                    model_player.update({
+                    Has_Turn: true
+                },{
+                    where:{
+                        id:{ $ne: Player_id },
+                        Game_id: Game_id,
+                        Room_id: Room_id
+                    },
+                    transaction: my_transaction
+                })
+            );
+            
+            //4. Now check for all the pieces for the current player and determine if he won or not
+            //If there are less than 4 pieces, no need to check since game is definetly not finished
+            if(all_pieces.length >= 4){
+                //navigate to all directions from (Position_X, Position_Y)
+                for(var i = 0; i < 7; i++){
+                    //reset to the given position (starting point)
+                    var current_x = Position_X;
+                    var current_y = Position_Y;
+                    
+                    //Set the connected points to 1
+                    var connected = 1;
+                    
+                    //start travelling to a single direction
+                    while(connected < 4){
+                        //go to next point
+                        current_x = current_x + directions[i].x;
+                        current_y = current_y + directions[i].y;
+                        
+                        //check for game board boundaries
+                        if(current_x < 0 || current_x > 6 || current_y < 0 || current_y > 5){
+                            //skip to next direction since boundary was crossed
+                            break;
+                        }
+
+                        //check if a piece exists in that co-ordinate
+                        if(isPiecePresent(all_pieces, current_x, current_y)){
+                            //we found a piece..increment the counter
+                            connected++;
+                        }else{
+                            //since the piece is not present, we can skip to next direction
+                            break;
+                        }
+                    }
+
+                    //control will reach here on 3 conditions - piece was not found / connected = 4 / crossed the boundary
+                    if(connected == 4){
+                        Is_Game_Finished = true;
+                        break;
+                    }
+                }
+            }
+
+            //control will reach here on 2 conditions - 4 or more pieces were found / all directions were traversed
+            //If game is not finished, we can commit the transaction and return the response to user
+            //If game is finished, then we have to update player and game object in db
+            if(!Is_Game_Finished){
+
+                //Check if number of pieces before posting is less than 41
+                if(pieces_in_game_before_piece_post < 41){
+                    //5. commit since game is not finished yet and winner was not found
+                    return my_seq.Promise.all(promises);
+                }else{
+                    //Since before posting piece..count was 41..and winner was not found
+                    //Draw condition encountered since the game board is full
+                    //6. Update Game object - Is_Finished, End_Time
+                    promises.push(
+                        model_game.update({
+                            Is_Finished: true,
+                            End_Time: Date.now()
+                        },{
+                            where:{
+                                id: Game_id,
+                                Room_id: Room_id
+                            },
+                            transaction: my_transaction
+                        })
+                    );
+                                    
+                    //7. Update current Player object - Is_Winner 
+                    promises.push(
+                        model_player.update({
+                            Is_Winner: false
+                        },{
+                            where:{
+                                id: Player_id,
+                                Game_id: Game_id
+                            },
+                            transaction: my_transaction
+                        })
+                    );
+
+                    //8. Update opponent Player object - Is_Winner  
+                    promises.push(
+                        model_player.update({
+                            Is_Winner: false
+                        },{
+                            where:{
+                                id:{ $ne: Player_id },
+                                Game_id: Game_id,
+                                Room_id: Room_id
+                            },
+                            transaction: my_transaction
+                        })
+                    );
+
+                    //Update response object attributes
+                    Winner_Player_Id = 0;
+                    Winner_User_Id = 0;
+
+                    //9. Finally commit transactions 1-4, 6-8
+                    return my_seq.Promise.all(promises);
+                }
+            }else{
+
+                //10. Update Game object - Is_Finished, End_Time
+                promises.push(
+                    model_game.update({
+                        Is_Finished: true,
+                        End_Time: Date.now()
+                    },{
+                        where:{
+                            id: Game_id,
+                            Room_id: Room_id
+                        },
+                        transaction: my_transaction
+                    })
+                );
+                                
+                //11. Update Winner Player object - Is_Winner 
+                promises.push(
+                    model_player.update({
+                        Is_Winner: true
+                    },{
+                        where:{
+                            id: Player_id,
+                            Game_id: Game_id
+                        },
+                        transaction: my_transaction
+                    })
+                );
+
+                //12. Update Loser Player object - Is_Winner  
+                promises.push(
+                    model_player.update({
+                        Is_Winner: false
+                    },{
+                        where:{
+                            id:{ $ne: Player_id },
+                            Game_id: Game_id,
+                            Room_id: Room_id
+                        },
+                        transaction: my_transaction
+                    })
+                );
+
+                //Update response object attributes
+                Winner_Player_Id = Player_id;
+                Winner_User_Id = User_id;
+
+                //13. Finally commit transactions 1-4, 10-12
+                return my_seq.Promise.all(promises);
+            }
+        }).then(result=>{
+            return res.status(200).send({
+                Is_Game_Finished: Is_Game_Finished,
+                Winner_Player_Id: Winner_Player_Id,
+                Winner_User_Id: Winner_User_Id
+            });
+        }).catch(error=>{
+            return res.status(500).send(helper.getResponseObject(false, 'Error posting piece. Code 2.'));
+        })
+    }).catch(error=>{
+        return res.status(500).send(helper.getResponseObject(false, 'Error posting piece. Code 1.'));
+    })
+}
+
+/**
+ * @author: Vidit Singhal
+ * @description: Checks from an array of pieces if it is present in the given (x,y) coordinate
+ * @param {*} all_pieces Array of all pieces
+ * @param {*} position_x x co-ordinate of location to check
+ * @param {*} position_y y co-ordinate of location to check
+ * @returns: 
+ */
+function isPiecePresent(all_pieces, position_x, position_y){
+    var piece_count = all_pieces.length;
+    var piece_found = false;
+    for(var i = 0; i < piece_count; i++){
+        var single_piece = all_pieces[i];
+        if(single_piece.Position_X == position_x && single_piece.Position_Y == position_y){
+            piece_found = true;
+            break;
+        }
+    }
+    return piece_found;
+}
+
 //Making available the endpoints outside the module.
 module.exports = {
     //After the player is inside a room, room details are required
@@ -421,4 +914,8 @@ module.exports = {
     //Heart beats - listen to incoming challenges / ongoing challenge
     incomingChallengesHB: incomingChallengesHB,
     ongoingChallengeHB: ongoingChallengeHB,
+
+    //Game related endpoints
+    initGame: initGame,
+    postPiece: postPiece
 }
