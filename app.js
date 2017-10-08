@@ -6,6 +6,7 @@
 var express = require('express');
 var http = require('http');
 var body_parser = require('body-parser');
+var socket_io = require('socket.io');
 
 //Helper functions
 var helper = require('./helper');
@@ -18,6 +19,7 @@ var service_game = require('./services/GameService');
 //Initializing the express app
 var app = express();
 var server = http.createServer(app);
+var io = socket_io(server);
 
 //Middleware stuff - So that we can use the request.body in endpoints - Will accept both JSON or urlencoded at a time.
 app.use(body_parser.json());
@@ -65,6 +67,93 @@ app.post('/test', function(req, res){
     res.status(200).send({'test_param': test_param});
 })
 
+/* Socket IO */
+
+//CORS
+io.origins("*:*");
+
+// //Middleware to check request headers
+// io.use(function(socket, next){
+//     var req_api_key = socket.request.headers['api-key'];
+//     if(req_api_key == 'E4B7BFA0C93EEDA1AB0928404FF5CFAEDB46847D31B475EFE5F69D8C3E46D074'){
+//         next();
+//     }else{
+//         socket.disconnect(true);
+//     }
+// });
+
+//Socket routes
+var message_io = io.of('/messages');
+
+message_io.on('connection', function messageChat(socket){
+    //Connection Handler
+    console.log("User connected to individualMessageChat.");
+    var socket_data = socket.request;
+
+    //Room Message handlers
+
+        //1. Joining a room
+        socket.on('join-room', function(data){
+            //Leave all the rooms first since a user can only be inside one room
+            for(var room in socket.rooms){
+                socket.leave(room);
+                //Notify the client connected in that room that this client has left
+                message_io.to(room).emit('client-left-room', {
+                    user_id: socket.user_id,
+                    user_screen_name: socket.user_screen_name
+                });
+                console.log(socket.user_id + ' left ' + room);
+            }
+
+            //Get the room id from the data
+            var room_id = data.room_id;
+            
+            //Add data to socket
+            socket.user_id = data.user_id;
+            socket.user_screen_name = data.user_screen_name;
+            
+            //join the room
+            socket.join('room_' + room_id);
+
+            //Let the clients connected to the room know that there is another client who joined
+            message_io.to('room_' + room_id).emit('client-join-room', {
+                user_id: socket.user_id,
+                user_screen_name: socket.user_screen_name
+            })
+        })
+
+        //2. Send Message in room
+        socket.on('send-room-message', function(data){
+            //Get the data from sender
+            var room_id = data.room_id;
+            //Emit to connected recievers
+            socket.broadcast.to('room_' + room_id).emit('client-rcv-room-msg', data);
+        })
+
+    //Disconnecting handler
+    socket.on('disconnecting', function(){
+        //Get all rooms the client was in..
+        var all_rooms_of_user = socket.rooms;
+        //Check since there might not be any rooms for a client
+        if(all_rooms_of_user){
+            for(var single_room in all_rooms_of_user){
+                //Let all rooms know that the user has left..
+                message_io.to(single_room).emit('client-left-room', {
+                    user_id: socket.user_id,
+                    user_screen_name: socket.user_screen_name
+                });
+                console.log(socket.user_id + ' left ' + single_room);
+            }
+        }
+    });
+
+    //Disconnect handler
+    socket.on('disconnect', function(){
+        console.log("User disconnected from individualMessageChat.");
+        console.log(socket.rooms);
+    });
+});
+
 /* Application Routes */
 
 //User Service
@@ -96,3 +185,38 @@ app.post('/piece', service_game.postPiece);
 app.get('/lookup/room', service_game.getRoomTypes);
 app.get('/rooms', service_game.getRooms);
 
+//Socket endpoints
+app.get('/socket/clients', function(req, res){
+    //Get room id
+    var room_id = req.query.room_id;
+    
+    //Check if the room exists
+    if(!message_io.adapter.rooms['room_' + room_id]){
+        //room does not exists
+        //return an empty array
+        return res.status(200).send({
+            success: true,
+            users: []
+        });
+    }
+
+    //Fetch clients connected to socket
+    try{
+        var online_users_in_room = [];
+        var clients = message_io.adapter.rooms['room_' + room_id].sockets;
+        for (var clientId in clients) {
+            var client_socket = message_io.sockets[clientId];
+            online_users_in_room.push({
+                id: client_socket.user_id,
+                Screen_Name: client_socket.user_screen_name
+            });
+        }
+        return res.status(200).send({
+            success: true,
+            users: online_users_in_room
+        });
+    } catch(e){
+        console.log(e);
+        return res.status(200).send(helper.getResponseObject(false, 'Error retrieving connected clients.'));
+    }
+});
