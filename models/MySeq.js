@@ -13,7 +13,8 @@ var MySeq = new Sequelize(mysql_config['dbname'], mysql_config['username'], mysq
         max: 5,
         min: 0,
         idle: 10000
-    }
+    },
+    timezone: 'America/New_York'
 });
 
 module.exports = MySeq;

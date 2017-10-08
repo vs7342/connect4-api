@@ -93,16 +93,19 @@ function signup(req, res){
                     Room_id: 1
                 }).then(created_user=>{
                     return res.status(200).send({
-                        id: created_user.id,
-                        Email_id: created_user.Email_id,
-                        First_Name: created_user.First_Name,
-                        Last_Name: created_user.Last_Name,
-                        Screen_Name: created_user.Screen_Name,
-                        Win_Count: created_user.Win_Count,
-                        Games_Played: created_user.Games_Played,
-                        User_Since: created_user.User_Since,
-                        Experience: created_user.Experience,
-                        Room_id: created_user.Room_id
+                        success: true,
+                        user: {
+                            id: created_user.id,
+                            Email_id: created_user.Email_id,
+                            First_Name: created_user.First_Name,
+                            Last_Name: created_user.Last_Name,
+                            Screen_Name: created_user.Screen_Name,
+                            Win_Count: created_user.Win_Count,
+                            Games_Played: created_user.Games_Played,
+                            User_Since: created_user.User_Since,
+                            Experience: created_user.Experience,
+                            Room_id: created_user.Room_id
+                        }
                     });
                 }).catch(error=>{
                     return res.status(500).send(helper.getResponseObject(false, 'Error signing up. Code 2.'));

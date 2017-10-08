@@ -4,6 +4,7 @@
 
 //Node modules
 var validator = require('validator');
+var moment = require('moment');
 
 //Custom modules
 var model_message = require('../models/Message');
@@ -52,7 +53,7 @@ function sendIndividualMessage(req, res){
                         model_message.create({
                             To_id: To_id,
                             Text: Text,
-                            Message_Time: Date.now(),
+                            Message_Time: moment().format(),
                             From_User_id: From_User_id,
                             MessageType_id: msg_type.id
                         }).then(msg_created=>{
@@ -192,11 +193,14 @@ function sendGroupMessage(req, res){
                                 model_message.create({
                                     To_id: To_id,
                                     Text: Text,
-                                    Message_Time: Date.now(),
+                                    Message_Time: moment().format(),
                                     From_User_id: From_User_id,
                                     MessageType_id: msg_type.id
                                 }).then(msg_created=>{
-                                    return res.status(200).send(helper.getResponseObject(true, 'Message sent.'));
+                                    return res.status(200).send({
+                                        success: true,
+                                        message: msg_created
+                                    });
                                 }).catch(error=>{
                                     return res.status(500).send(helper.getResponseObject(false, 'Error sending message. Code 3.'));
                                 });
@@ -252,14 +256,22 @@ function getGroupMessages(req, res){
                     }
                 }).then(msg_type=>{
                     //Fetch messages
+                    model_message.belongsTo(model_user, {foreignKey: 'From_User_id'});
                     model_message.findAll({
-                        attributes:['From_User_id', 'Text', 'Message_Time'],
+                        attributes:['id', 'From_User_id', 'Text', 'Message_Time'],
                         where:{
                             To_id: Room_id,
                             MessageType_id: msg_type.id
-                        }
+                        },
+                        include: [{
+                            model: model_user,
+                            attributes: ['Screen_Name']
+                        }]
                     }).then(messages=>{
-                        return res.status(200).send(messages);
+                        return res.status(200).send({
+                            success: true,
+                            messages: messages
+                        });
                     }).catch(error=>{
                         return res.status(500).send(helper.getResponseObject(false, 'Error fetching messages. Code 2.'));
                     });

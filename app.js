@@ -23,10 +23,23 @@ var server = http.createServer(app);
 app.use(body_parser.json());
 app.use(body_parser.urlencoded({extended: true}));
 
+//Specifically for browser since it sends pre-flight requests
+app.use(function(req, res, next){
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, api-key, access-token');
+    res.header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE, OPTIONS');
+
+    if(req.method === 'OPTIONS'){
+        res.status(204).send();
+    }else{
+        next();
+    }
+})
+
 //Middleware stuff - CORS and API Key header
 app.use(function(req, res, next){
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, api-key');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, api-key, access-token');
     res.header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE');
 
     if(req.headers['api-key'] == 'E4B7BFA0C93EEDA1AB0928404FF5CFAEDB46847D31B475EFE5F69D8C3E46D074'){

@@ -428,7 +428,11 @@ function ongoingChallengeHB(req, res){
                 id: Challenge_id
             }
         }).then(result=>{
-            return res.status(200).send(result);
+            if(result){
+                return res.status(200).send(result);
+            }else{
+                return res.status(200).send({});
+            }
         }).catch(error=>{
             return res.status(500).send(helper.getResponseObject(false, 'Error fetching challenge.'));
         });
