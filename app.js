@@ -79,4 +79,7 @@ app.get('/challenge/ongoing', service_game.ongoingChallengeHB);
 app.post('/game', service_game.initGame);
 app.post('/piece', service_game.postPiece);
 
+//Misc
+app.get('/lookup/room', service_game.getRoomTypes);
+app.get('/rooms', service_game.getRooms);
 

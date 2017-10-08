@@ -22,6 +22,35 @@ var helper = require('../helper');
 
 /**
  * @author: Vidit Singhal
+ * @description: Fetches all the room types in DB from Lookup_RoomType table
+ */
+function getRoomTypes(req, res){
+    model_lookup_room.findAll()
+        .then(result=>{
+            return res.status(200).send(result);
+        })
+        .catch(error=>{
+            return res.status(500).send(helper.getResponseObject(false, 'Error ecountered.'));
+        });
+};
+
+function getRooms(req, res){
+    model_room.belongsTo(model_lookup_room, {foreignKey: 'RoomType_id'});
+    model_room.findAll({
+        attributes: ['id'],
+        include: [{
+            model: model_lookup_room
+        }]
+    }).then(result=>{
+        return res.status(200).send(result);
+    })
+    .catch(error=>{
+        return res.status(500).send(helper.getResponseObject(false, 'Error ecountered.'));
+    });
+}
+
+/**
+ * @author: Vidit Singhal
  * @description: This will fetch all the ongoing games(Along with the players playing that game). It will also fetch online players not in a game.
  * @param: (Query Param)
  *      Room_id
@@ -917,5 +946,9 @@ module.exports = {
 
     //Game related endpoints
     initGame: initGame,
-    postPiece: postPiece
+    postPiece: postPiece,
+
+    //Misc
+    getRoomTypes: getRoomTypes,
+    getRooms: getRooms
 }
