@@ -148,7 +148,21 @@ function login(req, res){
             }
         }).then(user_found=>{
             if(user_found){
-                return res.status(200).send(user_found);
+                //Enter room with ID = 1 since when a user logs in, he enters into the lobby
+                model_user.update({
+                    Room_id: 1
+                },{
+                    where: {
+                        id: user_found.id
+                    }
+                }).then(result=>{
+                    //Since the user_found variable has the older Room_id value, change it.. since it is already updated in the backend
+                    user_found.Room_id = 1;
+
+                    return res.status(200).send({success: true, user: user_found});
+                }).catch(error=>{
+                    return res.status(500).send(helper.getResponseObject(false, 'Error logging in. Code 2.'));
+                });
             }else{
                 return res.status(200).send(helper.getResponseObject(false, 'Invalid username and/or password.'));
             }

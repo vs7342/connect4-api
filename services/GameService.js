@@ -175,11 +175,16 @@ function challengePlayer(req, res){
             if(both_users.length == 2){
                 if(both_users[0].Room_id == both_users[1].Room_id){
                     //Second - check if both players are not in an ongoing game
+                    model_game.hasMany(model_player, {foreignKey: 'Room_id'});
                     model_game.findAll({
                         where:{
                             Room_id: both_users[0].Room_id,
                             Is_Finished: false
-                        }
+                        },
+                        include: [{
+                            model: model_player,
+                            as: 'Players'
+                        }]
                     }).then(ongoing_games=>{
                         //gather all the players inside the ongoing games
                         var players_in_game = [];
@@ -231,6 +236,17 @@ function challengePlayer(req, res){
                                     //Send the created challenge to user with status 200 and success:true
                                     var return_obj = helper.getResponseObject(true, 'Challenge created successfully.');
                                     return_obj.data = created_challenge;
+                                    //start a timer to expire that challenge in 30 seconds
+                                    setTimeout(()=>{
+                                        model_challenge.update({
+                                            Expired: true
+                                        },{
+                                            where: {
+                                                id: created_challenge.id
+                                            }
+                                        });
+                                    }, 30000);
+                                    //Finally send a response
                                     return res.status(200).send(return_obj);
                                 }).catch(error=>{
                                     return res.status(500).send(helper.getResponseObject(false, 'Error challenging player. Code 4.'));
@@ -388,6 +404,8 @@ function incomingChallengesHB(req, res){
     var To_User_id = req.query.To_User_id;
     //param check
     if(To_User_id){
+        //Add screen name of user challenging
+        model_challenge.belongsTo(model_user, {foreignKey: 'From_User_id'});
         //fetch incoming challenges
         model_challenge.findAll({
             where:{
@@ -395,7 +413,11 @@ function incomingChallengesHB(req, res){
                 Accepted: null,
                 Cancelled: false,
                 Expired: false
-            }
+            },
+            include:[{
+                model: model_user,
+                attributes: ['id', 'Screen_Name']
+            }]
         }).then(result=>{
             return res.status(200).send(result);
         }).catch(error=>{
