@@ -5,6 +5,7 @@
 //Node modules
 var validator = require('validator');
 var crypto = require('crypto');
+var jwt = require('jsonwebtoken');
 
 //Custom modules
 var model_user = require('../models/User');
@@ -14,6 +15,10 @@ var helper = require('../helper');
 
 //Secret key to hash the password
 const secret_key = "I have trust issues!";
+
+//Fetching secret for jwt
+var config_file_name = '../configs/' + helper.ENVIRONMENT + '.json';
+const jwt_secret = require(config_file_name).JwtSecret;
 
 /**
  * @author: Vidit Singhal
@@ -94,7 +99,7 @@ function signup(req, res){
                 }).then(created_user=>{
                     return res.status(200).send({
                         success: true,
-                        user: {
+                        token: getJWT({
                             id: created_user.id,
                             Email_id: created_user.Email_id,
                             First_Name: created_user.First_Name,
@@ -105,7 +110,7 @@ function signup(req, res){
                             User_Since: created_user.User_Since,
                             Experience: created_user.Experience,
                             Room_id: created_user.Room_id
-                        }
+                        })
                     });
                 }).catch(error=>{
                     return res.status(500).send(helper.getResponseObject(false, 'Error signing up. Code 2.'));
@@ -159,7 +164,7 @@ function login(req, res){
                     //Since the user_found variable has the older Room_id value, change it.. since it is already updated in the backend
                     user_found.Room_id = 1;
 
-                    return res.status(200).send({success: true, user: user_found});
+                    return res.status(200).send({success: true, token: getJWT(user_found.dataValues)});
                 }).catch(error=>{
                     return res.status(500).send(helper.getResponseObject(false, 'Error logging in. Code 2.'));
                 });
@@ -172,6 +177,18 @@ function login(req, res){
     }else{
         return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters'));
     }
+}
+
+function getJWT(payload){
+    //Setting expiry date to current + 7 days
+    var expiry = new Date();
+    expiry.setDate(expiry.getDate() + 7);
+
+    //Add the expiry date in the payload
+    payload['exp'] = parseInt(expiry.getTime() / 1000);
+
+    //Finally generate the signed token and return
+    return jwt.sign(payload, jwt_secret);
 }
 
 /**

@@ -4,5 +4,6 @@
         "dbname":"qa-db-name",
         "username":"qa-username",
         "password":"qa-pwd"
-    }
+    },
+    "JwtSecret": "qa-jwt-secret"
 }

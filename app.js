@@ -7,9 +7,14 @@ var express = require('express');
 var http = require('http');
 var body_parser = require('body-parser');
 var socket_io = require('socket.io');
+var jwt = require('jsonwebtoken');
 
 //Helper functions
 var helper = require('./helper');
+
+//Fetching secret for jwt
+var config_file_name = './configs/' + helper.ENVIRONMENT + '.json';
+const jwt_secret = require(config_file_name).JwtSecret;
 
 //Services
 var service_user = require('./services/UserService');
@@ -38,16 +43,35 @@ app.use(function(req, res, next){
     }
 })
 
+// Moving these endpoints up since these don't require api-key header
+app.post('/signup', service_user.signup);
+app.post('/login', service_user.login);
+
 //Middleware stuff - CORS and API Key header
 app.use(function(req, res, next){
     res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, api-key, access-token');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, api-key');
     res.header('Access-Control-Allow-Methods', 'POST, GET, PUT, DELETE');
 
-    if(req.headers['api-key'] == 'E4B7BFA0C93EEDA1AB0928404FF5CFAEDB46847D31B475EFE5F69D8C3E46D074'){
-        next();
+    if(req.headers['api-key']){
+        //Grab the token from the header
+        var token = req.headers['api-key'];
+
+        //Verify the signature/token
+        jwt.verify(token, jwt_secret, function(err, decoded){
+            if(err){
+                return res.status(403).send({
+                    message: "Invalid token"
+                })
+            }else{
+                console.log(decoded);
+                req.decoded = decoded;
+                next();
+            }
+        });
+
     }else{
-        res.status(403).send(helper.getResponseObject(false, 'Invalid API Key.'));
+        res.status(403).send(helper.getResponseObject(false, 'Please provide a token.'));
     }
 })
 
@@ -157,8 +181,6 @@ message_io.on('connection', function messageChat(socket){
 /* Application Routes */
 
 //User Service
-app.post('/signup', service_user.signup);
-app.post('/login', service_user.login);
 app.get('/screen/available', service_user.checkScreenName);
 app.get('/email/available', service_user.checkEmail);
 app.put('/enter/room', service_user.enterRoom);

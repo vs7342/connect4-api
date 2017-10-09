@@ -4,5 +4,6 @@
         "dbname":"prod-db-name",
         "username":"prod-username",
         "password":"prod-pwd"
-    }
+    },
+    "JwtSecret": "prod-jwt-secret"
 }

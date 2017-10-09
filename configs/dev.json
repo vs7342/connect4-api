@@ -4,5 +4,6 @@
         "dbname":"some-dbname",
         "username":"some-username",
         "password":"some-password"
-    }
+    },
+    "JwtSecret": "some-jwt-secret"
 }
