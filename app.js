@@ -114,6 +114,11 @@ message_io.on('connection', function messageChat(socket){
     console.log("User connected to individualMessageChat.");
     var socket_data = socket.request;
 
+    //Individual Message handler
+    socket.on('send-ind-message', function(data){
+        message_io.emit('client-rcv-ind-msg', data);
+    });
+
     //Room Message handlers
 
         //1. Joining a room
@@ -189,6 +194,7 @@ app.put('/enter/room', service_user.enterRoom);
 app.post('/message/individual', service_message.sendIndividualMessage);
 app.get('/message/individual/from/all', service_message.getAllIndividualMessages);
 app.get('/message/individual/from/single', service_message.getIndividualMessagesFromSingleUser)
+app.get('/message/individual/conversation', service_message.getIndividualMessageConversation);
 app.post('/message/room', service_message.sendGroupMessage);
 app.get('/message/room', service_message.getGroupMessages);
 

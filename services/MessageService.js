@@ -57,7 +57,10 @@ function sendIndividualMessage(req, res){
                             From_User_id: From_User_id,
                             MessageType_id: msg_type.id
                         }).then(msg_created=>{
-                            return res.status(200).send(helper.getResponseObject(true, 'Message sent.'));
+                            return res.status(200).send({
+                                success: true,
+                                message: msg_created
+                            });
                         }).catch(error=>{
                             return res.status(500).send(helper.getResponseObject(false, 'Error sending message. Code 2.'));
                         });
@@ -141,6 +144,58 @@ function getIndividualMessagesFromSingleUser(req, res){
                 }
             }).then(messages=>{
                 return res.status(200).send(messages);
+            }).catch(error=>{
+                return res.status(500).send(helper.getResponseObject(false, 'Error fetching messages.'));
+            });
+        })
+    }else{
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters'));
+    }
+}
+
+/**
+ * @author: Vidit Singhal
+ * @description: Endpoint to fetch a set of messages exchanged between 2 users (Individual message conversation)
+ * @param: (Query params)
+ *      user_id_1
+ *      user_id_2
+ */
+function getIndividualMessageConversation(req, res){
+    //body params
+    var user_id_1 = req.query.user_id_1;
+    var user_id_2 = req.query.user_id_2;
+    //param check
+    if(user_id_1 && user_id_2){
+        //Fetch the lookup message type id for 'IND' messages
+        model_lookup_message_type.findOne({
+            where:{
+                Code: 'IND'
+            }
+        }).then(msg_type=>{
+            //Fetch messages
+            model_message.belongsTo(model_user, {foreignKey: 'From_User_id'})
+            model_message.findAll({
+                attributes:['id', 'From_User_id', 'Text', 'Message_Time'],
+                include:[{
+                    model: model_user,
+                    attributes: ['Screen_Name']
+                }],
+                where:{
+                    $or:[{
+                            $and:{
+                                From_User_id: user_id_1,
+                                To_id: user_id_2
+                            }
+                        },{
+                            $and:{
+                                From_User_id: user_id_2,
+                                To_id: user_id_1,
+                            }
+                    }],
+                    MessageType_id: msg_type.id
+                }
+            }).then(messages=>{
+                return res.status(200).send({success: true, messages:messages});
             }).catch(error=>{
                 return res.status(500).send(helper.getResponseObject(false, 'Error fetching messages.'));
             });
@@ -293,6 +348,7 @@ module.exports = {
     sendIndividualMessage : sendIndividualMessage,
     getAllIndividualMessages : getAllIndividualMessages,
     getIndividualMessagesFromSingleUser: getIndividualMessagesFromSingleUser,
+    getIndividualMessageConversation: getIndividualMessageConversation,
     sendGroupMessage : sendGroupMessage,
     getGroupMessages : getGroupMessages
 }
