@@ -995,6 +995,96 @@ function getAllPieces(req, res){
     }
 }
 
+/**
+ * @author: Vidit Singhal
+ * @description: This is a job which runs every 15 seconds. It basically completes an unfinished instance of game since it might happen that both players leave the game abruptly.
+ *               What it does in sequence:
+ *                  1. Pulls all the unfinished games
+ *                  2. Pulls players inside those games
+ *                  3. Checks if the player who had the turn has played in last 60 seconds (Basically checks with the Last_Played attribute in player model)
+ *                  4. Updates game/player models accordingly
+ *                  5. Finally emits the 'game-finished' event to the clients connected to the game_id if the game was finished indeed.
+ * @param {*} game_io 
+ */
+function completeUnfinishedGames(game_io){
+    //Loop through all the unfinished games
+    model_game.findAll({
+        where:{
+            Is_Finished: false
+        }
+    }).then(unfinished_games=>{
+        for (var i = 0; i < unfinished_games.length; i++) {
+            var single_game = unfinished_games[i];
+            //Find the player whose turn it is in this game
+            model_player.findAll({
+                where:{
+                    Game_id: single_game.id
+                }
+            }).then(players_in_game=>{
+                if(players_in_game[0].Has_Turn){
+                    var player_with_turn = players_in_game[0];
+                    var opponent_player = players_in_game[1];
+                }else{
+                    var player_with_turn = players_in_game[1];
+                    var opponent_player = players_in_game[0];
+                }
+                var last_played_est = player_with_turn.Last_Played;
+                var last_played_limit = new Date(last_played_est.getTime() + 60000);
+                //Now check if the limit is extended
+                //i.e. check if last_played_limit < current time (time has passed to play the turn)
+                //If yes.. then player has lost..Complete the game
+                //Else do nothing
+                var x = new Date();
+                if(last_played_limit < new Date()){
+                    //Player has lost since he did'nt play his turn
+                    //3 things to do DB wise.. 
+                    //update game model,
+                    model_game.update({
+                        Is_Finished: true,
+                        End_Time: Date.now()
+                    },{
+                        where:{
+                            id: single_game.id
+                        }
+                    }).catch(error=>{console.log(error)});
+                    //update player_with_turn model (lost) and
+                    model_player.update({
+                        Is_Winner: false
+                    },{
+                        where:{
+                            id: player_with_turn.id,
+                            Game_id: single_game.id
+                        }
+                    }).catch(error=>{console.log(error)});
+                    //update opponent_player model (winner)
+                    model_player.update({
+                        Is_Winner: true
+                    },{
+                        where:{
+                            id: opponent_player.id,
+                            Game_id: single_game.id
+                        }
+                    }).catch(error=>{console.log(error)});
+
+                    //Send the 'player left' / 'lost due to inactivity' message to the game_id (room) socket with following payload
+                    var socket_data = {
+                        game_id: single_game.id,
+                        lost_player_user_id: player_with_turn.User_id,
+                        lost_player_id: player_with_turn.id,
+                        winner_player_user_id: opponent_player.User_id,
+                        winner_player_id: opponent_player.id,
+                    };
+                    game_io.to('game_' + single_game.id).emit('game-finished', socket_data);
+                }
+            }).catch(error=>{
+                console.log(error);
+            });
+        }
+    }).catch(error=>{
+        console.log(error);
+    });
+}
+
 //Making available the endpoints outside the module.
 module.exports = {
     //After the player is inside a room, room details are required
@@ -1013,8 +1103,13 @@ module.exports = {
     //Game related endpoints
     initGame: initGame,
     postPiece: postPiece,
+    getAllPieces: getAllPieces,
 
     //Misc
     getRoomTypes: getRoomTypes,
-    getRooms: getRooms
+    getRooms: getRooms,
+
+    //Job
+    completeUnfinishedGames: completeUnfinishedGames,
+
 }

@@ -8,6 +8,7 @@ var http = require('http');
 var body_parser = require('body-parser');
 var socket_io = require('socket.io');
 var jwt = require('jsonwebtoken');
+var schedule = require('node-schedule');
 
 //Helper functions
 var helper = require('./helper');
@@ -181,6 +182,13 @@ message_io.on('connection', function messageChat(socket){
         console.log("User disconnected from individualMessageChat.");
         console.log(socket.rooms);
     });
+});
+
+/* Jobs */
+var rule = new schedule.RecurrenceRule();
+rule.second = [0, 15, 30, 45];
+schedule.scheduleJob(rule, ()=>{
+    service_game.completeUnfinishedGames(game_io)
 });
 
 /* Application Routes */
