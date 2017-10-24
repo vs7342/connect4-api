@@ -208,6 +208,7 @@ app.get('/challenge/incoming', service_game.incomingChallengesHB);
 app.get('/challenge/ongoing', service_game.ongoingChallengeHB);
 app.post('/game', service_game.initGame);
 app.post('/piece', service_game.postPiece);
+app.get('/piece/all', service_game.getAllPieces);
 
 //Misc
 app.get('/lookup/room', service_game.getRoomTypes);

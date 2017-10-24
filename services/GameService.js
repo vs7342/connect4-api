@@ -955,6 +955,46 @@ function isPiecePresent(all_pieces, position_x, position_y){
     return piece_found;
 }
 
+/**
+ * @author: Vidit Singhal
+ * @description: This will fetch all the pieces in a particular game.
+ * @param: (Query Param)
+ *      Game_id
+ * @returns: An array of pieces
+ */
+function getAllPieces(req, res){
+    //Query params
+    var Game_id = req.query.Game_id;
+    //Param check
+    if(Game_id){
+        //Define association since we want color as well in the piece response
+        model_piece.belongsTo(model_player, {foreignKey: 'Player_id'});
+        model_piece.findAll({
+            where:{
+                Game_id: Game_id
+            },
+            attributes:['id', 'Position_X', 'Position_Y', 'User_id'],
+            include:[{
+                model: model_player,
+                attributes: ['Color', 'id']
+            }],
+            order:[
+                ['Position_X', 'ASC'],
+                ['Position_Y', 'ASC']
+            ]
+        }).then(all_pieces => {
+            return res.status(200).send({
+                success: true,
+                pieces: all_pieces
+            })
+        }).catch(error => {
+            return res.status(500).send(helper.getResponseObject(false, 'Error fetching pieces.'));
+        });
+    }else{
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters.'));
+    }
+}
+
 //Making available the endpoints outside the module.
 module.exports = {
     //After the player is inside a room, room details are required
