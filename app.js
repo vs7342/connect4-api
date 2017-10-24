@@ -109,6 +109,35 @@ io.origins("*:*");
 
 //Socket routes
 var message_io = io.of('/messages');
+var game_io = io.of('/game');
+
+game_io.on('connection', function gameService(socket){
+    //Enter game
+    socket.on('join-game', function(data){
+        //Collect params
+        var user_id = data.user_id;
+        var game_id = data.game_id;
+        //Check whether the user is in an ongoing game
+        service_game.isUserInGame(user_id, game_id).then(valid=>{
+            if(valid){
+                //Now actually join the room
+                socket.join('game_' + game_id);
+                console.log(user_id  + ' joined game socket ' + game_id);
+            }else{
+                //do nothing.. maybe just log
+                console.log('Invalid Request');
+            }
+        })
+    });
+    
+    //Post piece
+    socket.on('post-piece-server', function(data){
+        //Get the game id from sender
+        var game_id = data.game_id;
+        //Emit to connected recievers
+        socket.broadcast.to('game_' + game_id).emit('rcv-piece-client', data);
+    })
+})
 
 message_io.on('connection', function messageChat(socket){
     //Connection Handler

@@ -1085,6 +1085,43 @@ function completeUnfinishedGames(game_io){
     });
 }
 
+/**
+ * @author: Vidit Singhal
+ * @description: Utility function to check if the given user is inside the specified game
+ * @param {*} user_id 
+ * @param {*} game_id
+ * @returns {Promise<boolean>} If the user is in the game, then the promise will be resolved to true. Else false.
+ */
+function isUserInGame(user_id, game_id){
+    return new Promise(resolve => {
+        //Fetch player id with user_id and game_id
+        model_player.findOne({
+            where: {
+                User_id: user_id,
+                Game_id: game_id
+            }
+        }).then(player_in_game=>{
+            if(player_in_game){
+                //now check if that game is valid(Check if the game is already finished)
+                model_game.findOne({
+                    where:{
+                        id: game_id,
+                        Is_Finished: false
+                    }
+                }).then(game_ongoing=>{
+                    if(game_ongoing){
+                        resolve(true);
+                    }else{
+                        resolve(false);
+                    }
+                })
+            }else{
+                resolve(false);
+            }
+        });
+    });
+}
+
 //Making available the endpoints outside the module.
 module.exports = {
     //After the player is inside a room, room details are required
@@ -1112,4 +1149,6 @@ module.exports = {
     //Job
     completeUnfinishedGames: completeUnfinishedGames,
 
+    //helper util stuff
+    isUserInGame: isUserInGame
 }
