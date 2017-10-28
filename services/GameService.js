@@ -242,7 +242,9 @@ function challengePlayer(req, res){
                                             Expired: true
                                         },{
                                             where: {
-                                                id: created_challenge.id
+                                                id: created_challenge.id,
+                                                Cancelled: false,
+                                                Accepted: null
                                             }
                                         });
                                     }, 30000);
@@ -481,69 +483,100 @@ function initGame(req, res){
     //param check
     if(Challenge_id){
         //fetch challenge details along with user details
-        model_challenge.belongsTo(model_user, {as: 'From_User', foreignKey: 'From_User_id'});
-        model_challenge.belongsTo(model_user, {as: 'To_User', foreignKey: 'To_User_id'});
         model_challenge.findOne({
             where:{
                 id: Challenge_id
-            },
-            include:[{
-                model: model_user, as: 'From_User'
-            },{
-                model: model_user, as: 'To_User'
-            }]
+            }
         }).then(challenge_found=>{
             if(challenge_found){
-                //check if the challenge is valid..accepted..not expired..not cancelled
-                if(challenge_found.Accepted == true && challenge_found.Cancelled == false && challenge_found.Expired == false && challenge_found.From_User.Room_id == challenge_found.To_User.Room_id){
-                    //Create game object
-                    model_game.create({
-                        Is_Finished: false,
-                        Start_Time: Date.now(),
-                        End_Time: null,
-                        Room_id: challenge_found.From_User.Room_id
-                    }).then(created_game=>{
-                        //Create the player objects
-                        //Challenger will be having first turn..and the color assigned would be red
-                        var challenger = {
-                            Has_Turn: true,
-                            Is_Challenger: true,
-                            Is_Winner: null,
-                            Color: 'Red',
-                            Last_Played: Date.now(),
-                            Game_id: created_game.id,
-                            Room_id: challenge_found.From_User.Room_id,
-                            User_id: challenge_found.From_User.id
-                        };
-                        //Challengee will have 'yellow' color assigned
-                        var challengee = {
-                            Has_Turn: false,
-                            Is_Challenger: false,
-                            Is_Winner: null,
-                            Color: 'Yellow',
-                            Last_Played: Date.now(),
-                            Game_id: created_game.id,
-                            Room_id: challenge_found.To_User.Room_id,
-                            User_id: challenge_found.To_User.id
-                        };
+                //Find users inside the challenge
+                model_user.findAll({
+                    where: {
+                        id: {
+                            $in: [challenge_found.From_User_id, challenge_found.To_User_id]
+                        }
+                    }
+                }).then(users_found=>{
+                    if(users_found[0].id == challenge_found.From_User_id){
+                        var from_user = users_found[0];
+                        var to_user = users_found[1];
+                    }else{
+                        var from_user = users_found[1];
+                        var to_user = users_found[0];
+                    }
+                    //check if the challenge is valid..accepted..not expired..not cancelled
+                    if(challenge_found.Accepted == true && challenge_found.Cancelled == false && challenge_found.Expired == false && from_user.Room_id == to_user.Room_id){
+                        //Challenge validation passed.. now see if there is already a game going on between those two users
+                        model_player.findAll({
+                            limit:2,
+                            where:{
+                                User_id: {
+                                    $in: [from_user.id, to_user.id]
+                                },
+                                Is_Winner: null
+                            },
+                            order: [['id', 'DESC']]
+                        }).then(existing_players=>{
+                            if(existing_players.length == 2 && existing_players[0].Game_id == existing_players[1].Game_id){
+                                return res.status(200).send({
+                                    Game_id: existing_players[0].Game_id,
+                                    Players: existing_players 
+                                });
+                            }
+                            //Create game object
+                            model_game.create({
+                                Is_Finished: false,
+                                Start_Time: Date.now(),
+                                End_Time: null,
+                                Room_id: from_user.Room_id
+                            }).then(created_game=>{
+                                //Create the player objects
+                                //Challenger will be having first turn..and the color assigned would be red
+                                var challenger = {
+                                    Has_Turn: true,
+                                    Is_Challenger: true,
+                                    Is_Winner: null,
+                                    Color: 'Red',
+                                    Last_Played: Date.now(),
+                                    Game_id: created_game.id,
+                                    Room_id: from_user.Room_id,
+                                    User_id: from_user.id
+                                };
+                                //Challengee will have 'yellow' color assigned
+                                var challengee = {
+                                    Has_Turn: false,
+                                    Is_Challenger: false,
+                                    Is_Winner: null,
+                                    Color: 'Yellow',
+                                    Last_Played: Date.now(),
+                                    Game_id: created_game.id,
+                                    Room_id: to_user.Room_id,
+                                    User_id: to_user.id
+                                };
 
-                        //Bulk insert into db
-                        model_player.bulkCreate(
-                            [challenger, challengee]
-                        ).then((created_players)=>{
-                            return res.status(200).send({
-                                Game: created_game,
-                                Players: created_players 
-                            });
+                                //Bulk insert into db
+                                model_player.bulkCreate(
+                                    [challenger, challengee]
+                                ).then((created_players)=>{
+                                    return res.status(200).send({
+                                        Game_id: created_game.id,
+                                        Players: created_players 
+                                    });
+                                }).catch(error=>{
+                                    return res.status(500).send(helper.getResponseObject(false, 'Error initializing players. Code 1.'));
+                                });
+                            }).catch(error=>{
+                                return res.status(500).send(helper.getResponseObject(false, 'Error initializing game. Code 3.'));
+                            })
                         }).catch(error=>{
-                            return res.status(500).send(helper.getResponseObject(false, 'Error initializing players. Code 1.'));
-                        });
-                    }).catch(error=>{
-                        return res.status(500).send(helper.getResponseObject(false, 'Error initializing game. Code 2.'));
-                    })
-                }else{
-                    return res.status(500).send(helper.getResponseObject(false, 'Invalid Challenge.'));
-                }
+
+                        })
+                    }else{
+                        return res.status(500).send(helper.getResponseObject(false, 'Invalid Challenge.'));
+                    }
+                }).catch(error=>{
+                    return res.status(500).send(helper.getResponseObject(false, 'Error initializing game. Code 2.'));
+                });
             }else{
                 return res.status(400).send(helper.getResponseObject(false, 'Challenge not found.'));
             }
@@ -609,7 +642,6 @@ function postPiece(req, res){
                                 where:{
                                     Game_id: Game_id,
                                     Room_id: Room_id,
-                                    User_id: User_id
                                 }
                             }).then(all_pieces_in_game=>{
                                 
@@ -770,7 +802,7 @@ function postPieceTransaction(req, res, Position_Y, pieces_in_game_before_piece_
             
             //4. Now check for all the pieces for the current player and determine if he won or not
             //If there are less than 4 pieces, no need to check since game is definetly not finished
-            if(all_pieces.length >= 4){
+            if(all_pieces.length >= 3){
                 //navigate to all directions from (Position_X, Position_Y)
                 for(var i = 0; i < 7; i++){
                     //reset to the given position (starting point)
@@ -922,6 +954,7 @@ function postPieceTransaction(req, res, Position_Y, pieces_in_game_before_piece_
             }
         }).then(result=>{
             return res.status(200).send({
+                Position_Y: Position_Y,
                 Is_Game_Finished: Is_Game_Finished,
                 Winner_Player_Id: Winner_Player_Id,
                 Winner_User_Id: Winner_User_Id
