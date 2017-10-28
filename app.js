@@ -244,6 +244,7 @@ app.put('/challenge/decline', service_game.declineChallenge);
 app.get('/challenge/incoming', service_game.incomingChallengesHB);
 app.get('/challenge/ongoing', service_game.ongoingChallengeHB);
 app.post('/game', service_game.initGame);
+app.get('/game/state', service_game.getMyGameState);
 app.post('/piece', service_game.postPiece);
 app.get('/piece/all', service_game.getAllPieces);
 

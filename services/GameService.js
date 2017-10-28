@@ -997,6 +997,71 @@ function getAllPieces(req, res){
 
 /**
  * @author: Vidit Singhal
+ * @description: This will fetch the state of a game from a player's perspective.
+ * @param: (Query Param)
+ *      Room_id
+ *      User_id
+ * @returns: 
+ *      {
+            myColor: <Color of the player who has requested>,
+            myOpponent: <Opponent of the player who has requested>,
+            isMyTurn: <True/False whether the player who has made the request has turn or not>
+        }
+ */
+function getMyGameState(req, res){
+    //Query params
+    var Game_id = req.query.Game_id;
+    var User_id = req.query.User_id;
+    //Param check
+    if(Game_id && User_id) {
+        //Fetch players inside the game
+        model_player.belongsTo(model_user, {foreignKey: "User_id"});
+        model_player.findAll({
+            where:{
+                Game_id: Game_id
+            },
+            include:[{
+                model: model_user,
+                attributes: ["Screen_Name"]
+            }]
+        }).then(players=>{
+            if(players.length == 2) {
+                var first_player = players[0];
+                var second_player = players[1];
+                var response_obj = {
+                    myColor: "",
+                    myOpponent: "",
+                    isMyTurn: ""
+                }
+                if(first_player.User_id == User_id){
+                    //Request is coming from first player
+                    response_obj.myColor = first_player.Color;
+                    response_obj.myOpponent = second_player.User.Screen_Name;
+                    response_obj.isMyTurn = first_player.Has_Turn;
+                }else if(second_player.User_id == User_id){
+                    //Request is coming from second player
+                    response_obj.myColor = second_player.Color;
+                    response_obj.myOpponent = first_player.User.Screen_Name;
+                    response_obj.isMyTurn = second_player.Has_Turn;
+                }else{
+                    //User with user_id is not inside the game with game_id
+                    return res.status(400).send(helper.getResponseObject(false, 'Invalid Request parameters.'));
+                }
+                //Send the response_obj as the response
+                return res.status(200).send(response_obj);
+            } else {
+                return res.status(400).send(helper.getResponseObject(false, 'Invalid Game ID.'));
+            }
+        }).catch(error=>{
+            return res.status(500).send(helper.getResponseObject(false, 'Error fetching game state.'));
+        })
+    } else {
+        return res.status(400).send(helper.getResponseObject(false, 'Insufficient request parameters.'));
+    }
+}
+
+/**
+ * @author: Vidit Singhal
  * @description: This is a job which runs every 15 seconds. It basically completes an unfinished instance of game since it might happen that both players leave the game abruptly.
  *               What it does in sequence:
  *                  1. Pulls all the unfinished games
@@ -1141,6 +1206,7 @@ module.exports = {
     initGame: initGame,
     postPiece: postPiece,
     getAllPieces: getAllPieces,
+    getMyGameState: getMyGameState,
 
     //Misc
     getRoomTypes: getRoomTypes,
